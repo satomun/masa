@@ -1,0 +1,17 @@
+import pandas as pd
+import numpy as np
+
+BS = pd.read_excel('hikaku.xlsx', sheet_name=0,skiprows=range(0,7),index_col=0).dropna(how="all")
+PL = pd.read_excel('hikaku.xlsx', sheet_name=1,skiprows=range(0,7),index_col=0).dropna(how="all")
+CR = pd.read_excel('hikaku.xlsx', sheet_name=2,skiprows=range(0,7),index_col=0).dropna(how="all")
+
+BS.columns = range(BS.shape[1])
+PL.columns = range(PL.shape[1])
+CR.columns = range(CR.shape[1])
+
+
+
+class Financial_indicators(bs,pl,cr):
+    def __init__(self):
+        self.ca_ratio = 0
+BS
