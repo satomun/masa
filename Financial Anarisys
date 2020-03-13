@@ -1,5 +1,10 @@
 import pandas as pd
 import numpy as np
+import calendar
+
+#ハイパラ
+month = 7
+days  = 215
 
 BS = pd.read_excel('hikaku.xlsx', sheet_name=0,skiprows=range(0,7),index_col=0).dropna(how="all")
 PL = pd.read_excel('hikaku.xlsx', sheet_name=1,skiprows=range(0,7),index_col=0).dropna(how="all")
@@ -11,7 +16,27 @@ CR.columns = range(CR.shape[1])
 
 
 
-class Financial_indicators(bs,pl,cr):
-    def __init__(self):
-        self.ca_ratio = 0
-BS
+class Financial_indicators():
+    def __init__(self,bs,pl,cr,month,ki=0):#kiは当年で０、前年で１とする
+        
+        self.自社メンテ売上月 = pl.loc["メンテ売上高1"][month*4-1-ki*2]
+        self.自社メンテ売上年 = pl.loc["メンテ売上高1"][(month+1)*4-1-ki*2]
+        self.他社メンテ売上月 = pl.loc["メンテ売上高2"][month*4-1-ki*2]
+        self.他社メンテ売上年 = pl.loc["メンテ売上高2"][(month+1)*4-1-ki*2]
+        self.一般工事売上月 = pl.loc["工事売上高"][month*4-1-ki*2]
+        self.一般工事売上年 = pl.loc["工事売上高"][(month+1)*4-1-ki*2]
+        self.モダニ売上月 = pl.loc["モダニ売上高"][month*4-1-ki*2]
+        self.モダニ売上年 = pl.loc["モダニ売上高"][(month+1)*4-1-ki*2]
+        self.総売上月 = self.自社メンテ売上月+self.他社メンテ売上月+self.一般工事売上月+self.モダニ売上月
+        self.総売上年 = self.自社メンテ売上年+self.他社メンテ売上年+self.一般工事売上年+self.モダニ売上年
+
+        self.純資産合計 = bs.loc["純資産合計"][month*4-1-ki*2]
+        self.総資産 = bs.loc["負債・純資産合計"][month*4-1-ki*2]
+        
+        self.自己資本比率 = self.純資産合計 / self.総資産
+        
+        
+touki = Financial_indicators(BS,PL,CR,7,0)
+zenki = Financial_indicators(BS,PL,CR,7,1)
+
+print(touki.モダニ売上年)
