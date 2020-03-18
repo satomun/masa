@@ -1,0 +1,64 @@
+# -*- coding: utf-8 -*-
+%matplotlib inline
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+
+ACC  = pd.read_excel("勘定科目.xlsx").dropna(subset=["勘定科目"]).query('勘定科目.str.match("[0-9]{3}")', engine='python')
+ACC  = ACC.drop("Unnamed: 1", axis=1).drop("Unnamed: 2", axis=1).drop("Unnamed: 3", axis=1).drop("Unnamed: 4", axis=1)
+
+TB34 = pd.read_csv("34.txt",encoding="SHIFT-JIS").dropna(subset=["勘定科目コード"]).drop("合計 (金額)", axis=1).drop("部門コード", axis=1).drop("部門名", axis=1)
+TB34["勘定科目"] = TB34["勘定科目コード"].apply(round).apply(str)
+TB33 = pd.read_csv("33.txt",encoding="SHIFT-JIS").dropna(subset=["勘定科目コード"]).drop("合計 (金額)", axis=1).drop("部門コード", axis=1).drop("部門名", axis=1)
+TB33["勘定科目"] = TB33["勘定科目コード"].apply(round).apply(str)
+TB32 = pd.read_csv("32.txt",encoding="SHIFT-JIS").dropna(subset=["勘定科目コード"]).drop("合計 (金額)", axis=1).drop("部門コード", axis=1).drop("部門名", axis=1)
+TB32["勘定科目"] = TB32["勘定科目コード"].apply(round).apply(str)
+TB31 = pd.read_csv("31.txt",encoding="SHIFT-JIS").dropna(subset=["勘定科目コード"]).drop("合計 (金額)", axis=1).drop("部門コード", axis=1).drop("部門名", axis=1)
+TB31["勘定科目"] = TB31["勘定科目コード"].apply(round).apply(str)
+TB30 = pd.read_csv("30.txt",encoding="SHIFT-JIS").dropna(subset=["勘定科目コード"]).drop("合計 (金額)", axis=1).drop("部門コード", axis=1).drop("部門名", axis=1)
+TB30["勘定科目"] = TB30["勘定科目コード"].apply(round).apply(str)
+TB29 = pd.read_csv("29.txt",encoding="SHIFT-JIS").dropna(subset=["勘定科目コード"]).drop("合計 (金額)", axis=1).drop("部門コード", axis=1).drop("部門名", axis=1)
+TB29["勘定科目"] = TB29["勘定科目コード"].apply(round).apply(str)
+TB28 = pd.read_csv("28.txt",encoding="SHIFT-JIS").dropna(subset=["勘定科目コード"]).drop("合計 (金額)", axis=1).drop("部門コード", axis=1).drop("部門名", axis=1)
+TB28["勘定科目"] = TB28["勘定科目コード"].apply(round).apply(str)
+TB27 = pd.read_csv("27.txt",encoding="SHIFT-JIS").dropna(subset=["勘定科目コード"]).drop("合計 (金額)", axis=1).drop("部門コード", axis=1).drop("部門名", axis=1)
+TB27["勘定科目"] = TB27["勘定科目コード"].apply(round).apply(str)
+TB26 = pd.read_csv("26.txt",encoding="SHIFT-JIS").dropna(subset=["勘定科目コード"]).drop("合計 (金額)", axis=1).drop("部門コード", axis=1).drop("部門名", axis=1)
+TB26["勘定科目"] = TB26["勘定科目コード"].apply(round).apply(str)
+TB25 = pd.read_csv("25.txt",encoding="SHIFT-JIS").dropna(subset=["勘定科目コード"]).drop("合計 (金額)", axis=1).drop("部門コード", axis=1).drop("部門名", axis=1)
+TB25["勘定科目"] = TB25["勘定科目コード"].apply(round).apply(str)
+
+#データ結合と不要項目削除
+ZAIMU = pd.merge(ACC,TB25,  on='勘定科目',how="left").drop("勘定科目コード", axis=1).drop("勘定科目名", axis=1)
+ZAIMU = pd.merge(ZAIMU,TB26,on='勘定科目',how="left").drop("勘定科目コード", axis=1).drop("勘定科目名", axis=1)
+ZAIMU = pd.merge(ZAIMU,TB27,on='勘定科目',how="left").drop("勘定科目コード", axis=1).drop("勘定科目名", axis=1)
+ZAIMU = pd.merge(ZAIMU,TB28,on='勘定科目',how="left").drop("勘定科目コード", axis=1).drop("勘定科目名", axis=1)
+ZAIMU = pd.merge(ZAIMU,TB29,on='勘定科目',how="left").drop("勘定科目コード", axis=1).drop("勘定科目名", axis=1)
+ZAIMU = pd.merge(ZAIMU,TB30,on='勘定科目',how="left").drop("勘定科目コード", axis=1).drop("勘定科目名", axis=1)
+ZAIMU = pd.merge(ZAIMU,TB31,on='勘定科目',how="left").drop("勘定科目コード", axis=1).drop("勘定科目名", axis=1)
+ZAIMU = pd.merge(ZAIMU,TB32,on='勘定科目',how="left").drop("勘定科目コード", axis=1).drop("勘定科目名", axis=1)
+ZAIMU = pd.merge(ZAIMU,TB33,on='勘定科目',how="left").drop("勘定科目コード", axis=1).drop("勘定科目名", axis=1)
+ZAIMU = pd.merge(ZAIMU,TB34,on='勘定科目',how="left").drop("勘定科目コード", axis=1).drop("勘定科目名", axis=1)
+
+ZAIMU = ZAIMU.T.fillna(0)
+ZAIMU.columns = ZAIMU.loc["勘定科目"]
+ZAIMU = ZAIMU.drop('勘定科目', axis=0)
+
+
+# データ生成
+x = ZAIMU.index
+mente = ZAIMU["511"].values 
+tasha = ZAIMU["512"].values
+kouji = ZAIMU["513"].values + ZAIMU["514"].values
+
+
+# プロット
+plt.plot(x, mente, label="mente")
+plt.plot(x, tasha, label="tasha")
+plt.plot(x, kouji, label="kouji")
+
+# 凡例の表示
+plt.legend("１０期分売上推移")
+# プロット表示(設定の反映)
+plt.show()
+
