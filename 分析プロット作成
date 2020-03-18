@@ -7,6 +7,9 @@ import matplotlib.pyplot as plt
 ACC  = pd.read_excel("勘定科目.xlsx").dropna(subset=["勘定科目"]).query('勘定科目.str.match("[0-9]{3}")', engine='python')
 ACC  = ACC.drop("Unnamed: 1", axis=1).drop("Unnamed: 2", axis=1).drop("Unnamed: 3", axis=1).drop("Unnamed: 4", axis=1)
 
+#最新データ追加位置
+TB35 = pd.read_csv("35.txt",encoding="SHIFT-JIS").dropna(subset=["勘定科目コード"]).drop("合計 (金額)", axis=1).drop("部門コード", axis=1).drop("部門名", axis=1)
+TB35["勘定科目"] = TB35["勘定科目コード"].apply(round).apply(str)
 TB34 = pd.read_csv("34.txt",encoding="SHIFT-JIS").dropna(subset=["勘定科目コード"]).drop("合計 (金額)", axis=1).drop("部門コード", axis=1).drop("部門名", axis=1)
 TB34["勘定科目"] = TB34["勘定科目コード"].apply(round).apply(str)
 TB33 = pd.read_csv("33.txt",encoding="SHIFT-JIS").dropna(subset=["勘定科目コード"]).drop("合計 (金額)", axis=1).drop("部門コード", axis=1).drop("部門名", axis=1)
@@ -39,6 +42,9 @@ ZAIMU = pd.merge(ZAIMU,TB31,on='勘定科目',how="left").drop("勘定科目コ�
 ZAIMU = pd.merge(ZAIMU,TB32,on='勘定科目',how="left").drop("勘定科目コード", axis=1).drop("勘定科目名", axis=1)
 ZAIMU = pd.merge(ZAIMU,TB33,on='勘定科目',how="left").drop("勘定科目コード", axis=1).drop("勘定科目名", axis=1)
 ZAIMU = pd.merge(ZAIMU,TB34,on='勘定科目',how="left").drop("勘定科目コード", axis=1).drop("勘定科目名", axis=1)
+ZAIMU = pd.merge(ZAIMU,TB35,on='勘定科目',how="left").drop("勘定科目コード", axis=1).drop("勘定科目名", axis=1)
+#最新データ追加位置
+
 
 ZAIMU = ZAIMU.T.fillna(0)
 ZAIMU.columns = ZAIMU.loc["勘定科目"]
@@ -50,15 +56,22 @@ x = ZAIMU.index
 mente = ZAIMU["511"].values 
 tasha = ZAIMU["512"].values
 kouji = ZAIMU["513"].values + ZAIMU["514"].values
+cs = ZAIMU["131"].values + ZAIMU["111"].values + ZAIMU["112"].values
+tanki = ZAIMU["321"].values
+chouki = ZAIMU["341"].values
+cs2 = cs-tanki-chouki
 
 
-# プロット
-plt.plot(x, mente, label="mente")
-plt.plot(x, tasha, label="tasha")
-plt.plot(x, kouji, label="kouji")
+plt.figure(figsize=(12,5))
+# plt.plot(x, mente, label="mente")
+# plt.plot(x, tasha, label="tasha")
+# plt.plot(x, kouji, label="kouji")
+plt.plot(x, cs, color="r",label="cs")
+plt.plot(x, cs2,label="cs2")
+plt.title('seibu',fontsize=20)
+plt.xlabel('month')
+plt.ylabel('kingaku')
 
-# 凡例の表示
-plt.legend("１０期分売上推移")
+
 # プロット表示(設定の反映)
 plt.show()
-
