@@ -45,33 +45,62 @@ ZAIMU = pd.merge(ZAIMU,TB34,on='勘定科目',how="left").drop("勘定科目コ�
 ZAIMU = pd.merge(ZAIMU,TB35,on='勘定科目',how="left").drop("勘定科目コード", axis=1).drop("勘定科目名", axis=1)
 #最新データ追加位置
 
-
 ZAIMU = ZAIMU.T.fillna(0)
 ZAIMU.columns = ZAIMU.loc["勘定科目"]
 ZAIMU = ZAIMU.drop('勘定科目', axis=0)
 
-
 # データ生成
 x = ZAIMU.index
-mente = ZAIMU["511"].values 
-tasha = ZAIMU["512"].values
-kouji = ZAIMU["513"].values + ZAIMU["514"].values
-cs = ZAIMU["131"].values + ZAIMU["111"].values + ZAIMU["112"].values
-tanki = ZAIMU["321"].values
-chouki = ZAIMU["341"].values
-cs2 = cs-tanki-chouki
+売掛金 = ZAIMU["152"].values
+棚卸資産 = ZAIMU["176"].values + ZAIMU["177"].values + ZAIMU["178"].values
+未払金 = ZAIMU["322"].values
+正味運転資金 = 売掛金 + 棚卸資産 - 未払金
+メンテ売上 = ZAIMU["511"].values 
+他社メンテ売上 = ZAIMU["512"].values
+工事売上 = ZAIMU["513"].values + ZAIMU["514"].values
+現預金 = ZAIMU["131"].values + ZAIMU["111"].values + ZAIMU["112"].values
+短期借入金 = ZAIMU["321"].values
+長期借入金 = ZAIMU["341"].values
+余裕現預金 = 現預金 - 短期借入金 - 長期借入金
 
 
-plt.figure(figsize=(12,5))
-# plt.plot(x, mente, label="mente")
-# plt.plot(x, tasha, label="tasha")
-# plt.plot(x, kouji, label="kouji")
-plt.plot(x, cs, color="r",label="cs")
-plt.plot(x, cs2,label="cs2")
-plt.title('seibu',fontsize=20)
-plt.xlabel('month')
-plt.ylabel('kingaku')
+# #------------------------------------------------
+# plt.figure(figsize=(12,5))
+# # plt.plot(x, mente, label="mente")
+# # plt.plot(x, tasha, label="tasha")
+# # plt.plot(x, kouji, label="kouji")
+# plt.plot(x, 正味運転資金, color="r",label="cs",marker="x")
+# plt.plot(x, 現預金, color="b",label="cs2",marker="x")
+# plt.title('seibu',fontsize=20)
+# plt.xlabel('month')
+# plt.ylabel('Account of Money')
+# # プロット表示(設定の反映)
+# plt.show()
+# #------------------------------------------------
 
+# fig = plt.figure()
+# # 1行2列の左
 
-# プロット表示(設定の反映)
-plt.show()
+# x = ZAIMU.index
+# y = ZAIMU["511"].values/(ZAIMU["511"].values+ZAIMU["512"].values+ZAIMU["513"].values+ZAIMU["514"].values)
+
+# ax1 = fig.add_subplot(1, 2, 1)
+# ax1.plot(x, y) 
+# ax1.set_title("uriage")
+
+# # 1行2列の右
+# labels = ["E", "D", "C", "B", "A"] 
+# y = [10, 20, 30, 40, 50] 
+# ex = [0, 0, 0, 0, 0.1] 
+# ax2 = fig.add_subplot(1, 2, 2)
+# ax2.pie(y, explode = ex, labels = labels, autopct = '%1.1f%%', startangle = 90) 
+# ax2.set_title("uriage")
+#------------------------------------------------
+PL = ZAIMU.T.loc["500":"999",].T
+BS = ZAIMU.T.loc["000":"499",].T
+# print(round(ZAIMU.shape[0]/12))#11
+# print(PL[108:120].sum())
+for i in list(range(1,round(ZAIMU.shape[0]/12))):#1～10でルール
+    PL_sum["i"].append(pd.DataFrame(PL[12*(i-1):12*i].sum()))
+print(PL_sum)
+BS_sum = BS[11:12]
