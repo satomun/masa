@@ -3,6 +3,7 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import re
 
 ACC  = pd.read_excel("勘定科目.xlsx").dropna(subset=["勘定科目"]).query('勘定科目.str.match("[0-9]{3}")', engine='python')
 ACC  = ACC.drop("Unnamed: 1", axis=1).drop("Unnamed: 2", axis=1).drop("Unnamed: 3", axis=1).drop("Unnamed: 4", axis=1)
@@ -32,7 +33,7 @@ TB25 = pd.read_csv("25.txt",encoding="SHIFT-JIS").dropna(subset=["勘定科目�
 TB25["勘定科目"] = TB25["勘定科目コード"].apply(round).apply(str)
 
 #データ結合と不要項目削除
-ZAIMU = pd.merge(ACC,TB25,  on='勘定科目',how="left").drop("勘定科目コード", axis=1).drop("勘定科目名", axis=1)
+ZAIMU = pd.merge(ACC  ,TB25,on='勘定科目',how="left").drop("勘定科目コード", axis=1).drop("勘定科目名", axis=1)
 ZAIMU = pd.merge(ZAIMU,TB26,on='勘定科目',how="left").drop("勘定科目コード", axis=1).drop("勘定科目名", axis=1)
 ZAIMU = pd.merge(ZAIMU,TB27,on='勘定科目',how="left").drop("勘定科目コード", axis=1).drop("勘定科目名", axis=1)
 ZAIMU = pd.merge(ZAIMU,TB28,on='勘定科目',how="left").drop("勘定科目コード", axis=1).drop("勘定科目名", axis=1)
@@ -49,34 +50,54 @@ ZAIMU = ZAIMU.T.fillna(0)
 ZAIMU.columns = ZAIMU.loc["勘定科目"]
 ZAIMU = ZAIMU.drop('勘定科目', axis=0)
 
-# データ生成
-x = ZAIMU.index
-売掛金 = ZAIMU["152"].values
-棚卸資産 = ZAIMU["176"].values + ZAIMU["177"].values + ZAIMU["178"].values
-未払金 = ZAIMU["322"].values
-正味運転資金 = 売掛金 + 棚卸資産 - 未払金
-メンテ売上 = ZAIMU["511"].values 
-他社メンテ売上 = ZAIMU["512"].values
-工事売上 = ZAIMU["513"].values + ZAIMU["514"].values
-現預金 = ZAIMU["131"].values + ZAIMU["111"].values + ZAIMU["112"].values
-短期借入金 = ZAIMU["321"].values
-長期借入金 = ZAIMU["341"].values
-余裕現預金 = 現預金 - 短期借入金 - 長期借入金
+num = re.sub("\\D", "", ZAIMU.index)
+print(num)    # "2019"
 
+# 分析用データ生成
+class Analisys_Month:
+    def __init__(self, df):
+        print("インスタンス生成")
+        self.df = df
+        self.年月 = df.index.str.match("[0-9]{3}")
+        self.年 = self.年月
+        self.売掛金 = df["152"].values
+        self.棚卸資産 = df["176"].values + df["177"].values + df["178"].values
+        self.未払金 = df["322"].values
+        self.正味運転資金 = self.売掛金 + self.棚卸資産 - self.未払金
+        self.メンテ売上 = df["511"].values 
+        self.他社メンテ売上 = df["512"].values
+        self.工事売上 = df["513"].values
+        self.モダニ売上 = df["514"].values
+        self.現預金 = df["131"].values + df["111"].values + df["112"].values
+        self.売上合計 = self.メンテ売上 + self.他社メンテ売上 + self.工事売上
+        self.短期借入金 = df["321"].values
+        self.長期借入金 = df["341"].values
+        self.借入合計=self.短期借入金 + self.長期借入金
+        self.余裕現預金 = self.現預金 - self.借入合計
+        self.メンテ費用 = df["611"] + df["612"] + df["680"]
+        self.メンテ付加価値 = self.メンテ売上 - self.メンテ費用
+        self.工事費用 = df["614"]  + df["681"]
+        self.工事付加価値 = self.工事売上 - self.工事費用      
+        self.モダニ費用 = df["617"] + df["682"]
+        self.モダニ付加価値 = self.モダニ売上 - self.モダニ費用      
+        
+zaimu = Analisys_Month(ZAIMU)
+        
+#------------------------------------------------
+plt.figure(figsize=(12,5))
+# plt.plot(x, mente, label="mente")
+# plt.plot(x, tasha, label="tasha")
+# plt.plot(x, kouji, label="kouji")
+plt.plot(zaimu.年月, zaimu.メンテ付加価値, color="r",label="cs",marker="x")
+plt.plot(zaimu.年月, zaimu.工事付加価値, color="b",label="cs2",marker="x")
+plt.plot(zaimu.年月, zaimu.モダニ付加価値, color="b",label="cs2",marker="x")
 
-# #------------------------------------------------
-# plt.figure(figsize=(12,5))
-# # plt.plot(x, mente, label="mente")
-# # plt.plot(x, tasha, label="tasha")
-# # plt.plot(x, kouji, label="kouji")
-# plt.plot(x, 正味運転資金, color="r",label="cs",marker="x")
-# plt.plot(x, 現預金, color="b",label="cs2",marker="x")
-# plt.title('seibu',fontsize=20)
-# plt.xlabel('month')
-# plt.ylabel('Account of Money')
-# # プロット表示(設定の反映)
-# plt.show()
-# #------------------------------------------------
+plt.title('seibu',fontsize=20)
+plt.xlabel('month')
+plt.ylabel('Account of Money')
+# プロット表示(設定の反映)
+plt.show()
+#------------------------------------------------
 
 # fig = plt.figure()
 # # 1行2列の左
@@ -98,9 +119,17 @@ x = ZAIMU.index
 #------------------------------------------------
 PL = ZAIMU.T.loc["500":"999",].T
 BS = ZAIMU.T.loc["000":"499",].T
+# PL[12:24]
+# BS[11:12]
+PL_sum=[]
+for i in range(round(ZAIMU.shape[0]/12)):
+    PL_sum.append(PL[12*(i-1):12*i].sum())
+PL_sum = pd.DataFrame(PL_sum).T
+del PL_sum[0]
+PL_sum
+
 # print(round(ZAIMU.shape[0]/12))#11
 # print(PL[108:120].sum())
-for i in list(range(1,round(ZAIMU.shape[0]/12))):#1～10でルール
-    PL_sum["i"].append(pd.DataFrame(PL[12*(i-1):12*i].sum()))
-print(PL_sum)
-BS_sum = BS[11:12]
+# PL_sum=pd.DataFrame(index=[],columns=list(range(ZAIMU.shape[0]%12)))
+# for i in list(range(1,round(PL.shape[0]/12))):#1～10でルール
+#     PL_sum["i"].append(pd.DataFrame(PL[12*(i-1):12*i].sum()))
