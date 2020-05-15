@@ -1,0 +1,646 @@
+
+train.shape (31470, 17) test.shape (31262, 16)
+定期借家とそうでないところに賃料差がある
+
+
++*In[1]:*+
+[source, ipython3]
+----
+# -*- coding: utf-8 -*-
+%matplotlib inline
+import matplotlib.pyplot as plt
+import seaborn as sns;sns.set()
+import re
+import warnings
+from scipy import stats
+from sklearn import preprocessing
+import numpy as np
+import pandas as pd
+from sklearn.model_selection import train_test_split,KFold,cross_validate
+import optuna
+import lightgbm as lgm
+import xgboost as xgb
+warnings.filterwarnings("ignore")
+
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import mean_squared_error
+
+train = pd.read_csv("train.csv")
+test = pd.read_csv("test.csv")
+submission = pd.read_csv("sample_submit.csv",header=None)
+del submission[1]
+----
+
+
++*In[2]:*+
+[source, ipython3]
+----
+# print(train.describe())
+# print(train["賃料"].idxmax())
+# train = train[train["賃料"]<1500000]
+
+# train.drop(5093,inplace=True)
+----
+
+
++*In[3]:*+
+[source, ipython3]
+----
+#アクセスの処理
+def access(acs):
+    acs_ls=[]
+    acs_ls_eki=[]
+    acs_tmp = acs.split("\t")
+    for i,x in enumerate(acs_tmp):#acs_tmp:○線、東京駅、徒歩１０分、￥t、○線、品川駅、７分、・・・
+
+        if "圏内" in x:
+            acs_ls_eki.append(acs_tmp[i-1])
+            acs_ls.append(20)
+            continue
+        if "徒歩" in x:
+            x = x.split("徒歩")[1].split("分")[0] #ex:x＝１０
+            x = int(x)
+            acs_ls.append(x)#10,7,17
+            acs_ls_eki.append(acs_tmp[i-1])#東京駅、品川駅、有楽町駅
+
+    m = min(acs_ls)
+    im = acs_ls.index(min(acs_ls))
+    return str(acs_ls_eki[im])+","+str(m)
+
+train["work"]=train["アクセス"].apply(access)
+test["work"]=test["アクセス"].apply(access)
+
+train["station"] = train["work"].apply(lambda x: x.split(",")[0])
+train["work"] = train["work"].apply(lambda x: x.split(",")[1]).apply(int)
+test["station"] = test["work"].apply(lambda x: x.split(",")[0])
+test["work"] = test["work"].apply(lambda x: x.split(",")[1]).apply(int)
+----
+
+
++*In[4]:*+
+[source, ipython3]
+----
+souba = pd.pivot_table(train,index="station",values="賃料")
+souba
+----
+
+
++*Out[4]:*+
+----
+賃料
+
+station
+
+204791.666667
+
+お花茶屋駅
+
+82532.380952
+
+とうきょうスカイツリー駅
+
+116984.848485
+
+ときわ台(東京都)駅
+
+80886.666667
+
+一之江駅
+
+85832.824427
+
+三ノ輪橋駅
+
+142812.500000
+
+三ノ輪駅
+
+114108.695652
+
+三河島駅
+
+100195.348837
+
+三田(東京都)駅
+
+143441.860465
+
+三越前駅
+
+186500.000000
+
+三軒茶屋駅
+
+119075.862069
+
+三郷(埼玉県)駅
+
+60000.000000
+
+三郷中央駅
+
+90000.000000
+
+三鷹台駅
+
+131937.500000
+
+上中里駅
+
+90475.000000
+
+上井草駅
+
+87625.000000
+
+上北沢駅
+
+113069.767442
+
+上板橋駅
+
+83259.259259
+
+上町駅
+
+112698.412698
+
+上石神井駅
+
+86925.373134
+
+上野広小路駅
+
+188333.333333
+
+上野毛駅
+
+140420.833333
+
+上野駅
+
+152625.000000
+
+下丸子駅
+
+102695.652174
+
+下井草駅
+
+89402.666667
+
+下北沢駅
+
+102669.230769
+
+下板橋駅
+
+111011.290323
+
+下神明駅
+
+103857.547170
+
+下落合駅
+
+98887.096774
+
+下赤塚駅
+
+89640.259740
+
+...
+
+...
+
+阿佐ケ谷駅
+
+93735.714286
+
+雑司が谷駅
+
+91581.250000
+
+雑色駅
+
+93337.500000
+
+雪が谷大塚駅
+
+122600.000000
+
+青井駅
+
+79515.000000
+
+青山一丁目駅
+
+547000.000000
+
+青物横丁駅
+
+113931.034483
+
+青砥駅
+
+85056.179775
+
+面影橋駅
+
+95045.454545
+
+飛鳥山駅
+
+83833.333333
+
+飯田橋駅
+
+168583.108108
+
+馬喰横山駅
+
+156913.636364
+
+馬喰町駅
+
+199420.138889
+
+馬込駅
+
+103876.363636
+
+駒場東大前駅
+
+135180.555556
+
+駒沢大学駅
+
+118633.333333
+
+駒込駅
+
+136445.238095
+
+高井戸駅
+
+102984.946237
+
+高円寺駅
+
+88212.592593
+
+高島平駅
+
+83985.714286
+
+高田馬場駅
+
+117334.285714
+
+高輪台駅
+
+169741.935484
+
+高野(東京都)駅
+
+79926.666667
+
+鬼子母神前駅
+
+77500.000000
+
+鮫洲駅
+
+117052.380952
+
+鵜の木駅
+
+129500.000000
+
+鶯谷駅
+
+111875.000000
+
+鷺ノ宮駅
+
+92664.000000
+
+麹町駅
+
+405000.000000
+
+麻布十番駅
+
+247637.126437
+
+479 rows × 1 columns
+----
+
+
++*In[5]:*+
+[source, ipython3]
+----
+def address(x):
+    return x.replace("東京都","").split("区")[0]
+train["address"] = train["所在地"].apply(address)
+test["address"] = test["所在地"].apply(address)
+----
+
+
++*In[6]:*+
+[source, ipython3]
+----
+def months(x):
+    if "新築" in x:
+        return 0
+    x = int(x.split("年")[0]) * 12 + int(x.split("年")[1].split("ヶ月")[0])
+    x = x // 12
+    return x
+
+train["months"] = train["築年数"].apply(months)
+test["months"] = test["築年数"].apply(months)
+
+----
+
+
++*In[7]:*+
+[source, ipython3]
+----
+train["mm"] = train["面積"].str.replace("m2","").apply(float)
+train["direction"] = train["方角"].fillna("NA")
+test["mm"] = test["面積"].str.replace("m2","").apply(float)
+test["direction"] = test["方角"].fillna("NA")
+----
+
+
++*In[8]:*+
+[source, ipython3]
+----
+train["shakuya"] = train["契約期間"].str.contains("定期借家")
+train["shakuya"].fillna(False,inplace=True)
+test["shakuya"] = test["契約期間"].str.contains("定期借家")
+test["shakuya"].fillna(False,inplace=True)
+# sns.barplot(x="shakuya",y="賃料",data=train)
+
+train["eakon"] = train["室内設備"].str.contains("エアコン")
+train["eakon"].fillna(False,inplace=True)
+test["eakon"] = test["室内設備"].str.contains("エアコン")
+test["eakon"].fillna(False,inplace=True)
+
+train["ev"] = train["室内設備"].str.contains("エレベータ")
+train["ev"].fillna(False,inplace=True)
+test["ev"] = test["室内設備"].str.contains("エレベータ")
+test["ev"].fillna(False,inplace=True)
+
+sns.boxplot(x="ev",y="賃料",data=train)
+----
+
+
++*Out[8]:*+
+----<matplotlib.axes._subplots.AxesSubplot at 0x1cae3f60080>
+![png](output_8_1.png)
+----
+
+
++*In[9]:*+
+[source, ipython3]
+----
+sns.distplot(train["賃料"])
+----
+
+
++*Out[9]:*+
+----<matplotlib.axes._subplots.AxesSubplot at 0x1caedd9b2e8>
+![png](output_9_1.png)
+----
+
+
++*In[10]:*+
+[source, ipython3]
+----
+train_y = train["賃料"]
+# train_y = np.log1p(train_y)
+train.drop(["賃料"],axis=1,inplace=True)
+alldata=pd.concat([train,test]).reset_index(drop=True)
+
+# null_col = alldata.isnull().sum()[alldata.isnull().sum()>0].index.tolist()
+# print(alldata.isnull().sum())
+
+----
+
+
++*In[11]:*+
+[source, ipython3]
+----
+del alldata["所在地"]
+del alldata["アクセス"]
+del alldata["間取り"]
+del alldata["築年数"]
+del alldata["方角"]
+del alldata["面積"]
+del alldata["所在階"]
+del alldata["バス・トイレ"]
+del alldata["キッチン"]
+del alldata["放送・通信"]
+del alldata["室内設備"]
+del alldata["駐車場"]
+del alldata["周辺環境"]
+del alldata["建物構造"]
+del alldata["契約期間"]
+del alldata["id"]
+
+----
+
+
++*In[12]:*+
+[source, ipython3]
+----
+#契約期間調査 (2019年8月が起点となる)
+
+# def keiyaku_kikan(x):
+#     if "まで" in str(x):
+#         return re.findall('[0-9]+', x)
+    
+# alldata["契約期間"]=alldata["契約期間"].apply(keiyaku_kikan)
+# alldata["契約期間"].unique()
+----
+
+
++*In[13]:*+
+[source, ipython3]
+----
+alldata.dtypes
+----
+
+
++*Out[13]:*+
+----work           int64
+station       object
+address       object
+months         int64
+mm           float64
+direction     object
+shakuya         bool
+eakon           bool
+ev              bool
+dtype: object----
+
+
++*In[14]:*+
+[source, ipython3]
+----
+#全てオブジェクトタイプ
+# alldata.dtypes
+def label_encording(data,ls):
+    for column in ls:
+        le=preprocessing.LabelEncoder()
+        le.fit(data[column])
+        data[column]=le.transform(data[column])
+        
+label_col=["station","address","direction","shakuya","eakon","ev"]
+label_encording(alldata,label_col)
+
+alldata.dtypes  
+#全てintになってることを確認# print(alldata_player.dtypes)# print(alldata_pitch.dtypes)
+----
+
+
++*Out[14]:*+
+----work           int64
+station        int32
+address        int32
+months         int64
+mm           float64
+direction      int32
+shakuya        int64
+eakon          int64
+ev             int64
+dtype: object----
+
+
++*In[17]:*+
+[source, ipython3]
+----
+train_x = alldata[:31470]
+test_x  = alldata[31470:]
+# print(train_x.shape,test_x.shape)
+----
+
+
++*In[18]:*+
+[source, ipython3]
+----
+def objectives(trial):
+    # scikit-learnでお試しデータの準備
+    X_train, X_test, y_train, y_test = train_test_split(train_x, train_y, random_state=0)
+
+    # optunaでのハイパーパラメータサーチ範囲の設定
+    params = {
+        #fixed
+        'boosting_type':'gbdt',
+#         'max_depth':-1,
+#         'learning_rate':0.1,
+        'n_estimators': 500,
+        'metric':'rmse',
+
+        #variable
+        'max_depth': trial.suggest_int('max_depth', 3, 7),
+        "learning_rate": trial.suggest_loguniform('learning_rate',0.005, 0.8),
+        'num_leaves': trial.suggest_int('num_leaves', 5, 200),
+#         'reg_alpha': trial.suggest_loguniform('reg_alpha',0.001, 10),
+#         'reg_lambda':trial.suggest_loguniform('reg_lambda', 0.001, 10),
+
+    }
+
+    # LightGBMで学習+予測
+    model = lgm.LGBMRegressor(**params,random_state=0)# 追加部分
+    
+    # kFold交差検定で決定係数を算出し、各セットの平均値を返す
+    kf = KFold(n_splits=3, shuffle=True, random_state=0)
+    scores = cross_validate(model, X=X_train, y=y_train,scoring='r2',cv=kf)   
+
+    return scores['test_score'].mean()
+
+# optunaによる最適化呼び出し
+opt = optuna.create_study(direction='maximize')
+opt.optimize(objectives, n_trials=10)
+
+
+# 実行結果表示
+print('最終トライアル回数:{}'.format(len(opt.trials)))
+print('ベストトライアル:')
+trial = opt.best_trial
+print('値:{}'.format(trial.value))
+print('パラメータ:')
+for key, value in trial.params.items():
+    print('{}:{}'.format(key, value))
+----
+
+
++*Out[18]:*+
+----
+[I 2020-05-15 19:47:28,427] Finished trial#0 with value: 0.882143203300035 with parameters: {'max_depth': 7, 'learning_rate': 0.632413340491886, 'num_leaves': 122}. Best is trial#0 with value: 0.882143203300035.
+[I 2020-05-15 19:47:32,107] Finished trial#1 with value: 0.8722376871976412 with parameters: {'max_depth': 5, 'learning_rate': 0.012432850425970914, 'num_leaves': 157}. Best is trial#0 with value: 0.882143203300035.
+[I 2020-05-15 19:47:34,468] Finished trial#2 with value: 0.8949461197177433 with parameters: {'max_depth': 4, 'learning_rate': 0.17262498345183871, 'num_leaves': 152}. Best is trial#2 with value: 0.8949461197177433.
+[I 2020-05-15 19:47:39,797] Finished trial#3 with value: 0.894205173497855 with parameters: {'max_depth': 7, 'learning_rate': 0.029038342720469536, 'num_leaves': 61}. Best is trial#2 with value: 0.8949461197177433.
+[I 2020-05-15 19:47:42,207] Finished trial#4 with value: 0.8671393810967943 with parameters: {'max_depth': 3, 'learning_rate': 0.02679363725502284, 'num_leaves': 94}. Best is trial#2 with value: 0.8949461197177433.
+[I 2020-05-15 19:47:44,790] Finished trial#5 with value: 0.8986852460974551 with parameters: {'max_depth': 4, 'learning_rate': 0.1840913910784891, 'num_leaves': 129}. Best is trial#5 with value: 0.8986852460974551.
+[I 2020-05-15 19:47:50,603] Finished trial#6 with value: 0.8901244688463698 with parameters: {'max_depth': 7, 'learning_rate': 0.5382389439994467, 'num_leaves': 139}. Best is trial#5 with value: 0.8986852460974551.
+[I 2020-05-15 19:47:55,641] Finished trial#7 with value: 0.9032921544219453 with parameters: {'max_depth': 7, 'learning_rate': 0.0747874144418193, 'num_leaves': 77}. Best is trial#7 with value: 0.9032921544219453.
+[I 2020-05-15 19:48:00,329] Finished trial#8 with value: 0.8969561208691283 with parameters: {'max_depth': 6, 'learning_rate': 0.050446008078988525, 'num_leaves': 36}. Best is trial#7 with value: 0.9032921544219453.
+[I 2020-05-15 19:48:03,973] Finished trial#9 with value: 0.8994365785401399 with parameters: {'max_depth': 6, 'learning_rate': 0.0784199865866843, 'num_leaves': 122}. Best is trial#7 with value: 0.9032921544219453.
+
+最終トライアル回数:10
+ベストトライアル:
+値:0.9032921544219453
+パラメータ:
+max_depth:7
+learning_rate:0.0747874144418193
+num_leaves:77
+----
+
+
++*In[19]:*+
+[source, ipython3]
+----
+params ={'max_depth': 4, 'learning_rate': 0.21, 'num_leaves': 34}
+
+model = lgm.LGBMRegressor(**params,metric="rmse",random_seed=0)
+model.fit(train_x,train_y)
+print("score:",model.score(train_x,train_y))
+model2 = lgm.LGBMRegressor(metric="rmse",max_depth=6,n_estimators=500,learning_rate=0.08,random_seed=1)
+model2.fit(train_x,train_y)
+print("score:",model2.score(train_x,train_y))
+
+
+----
+
+
++*Out[19]:*+
+----
+score: 0.9216723865777868
+score: 0.955257330348436
+----
+
+
++*In[20]:*+
+[source, ipython3]
+----
+submission["money"] = model.predict(test_x)*0.5 + model2.predict(test_x)*0.5
+# submission["money"] = np.expm1(model.predict(test_x)*0.5 + model2.predict(test_x)*0.5)
+submission.to_csv("submission_mainabi.csv",index=False,header=False)
+print('Save submission')
+----
+
+
++*Out[20]:*+
+----
+Save submission
+----
+
+
++*In[ ]:*+
+[source, ipython3]
+----
+
+----
