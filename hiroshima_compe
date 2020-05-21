@@ -1,0 +1,278 @@
+%matplotlib inline
+import numpy as np
+import pandas as pd
+pd.set_option('display.max_columns', None)
+import seaborn as sns
+import lightgbm as lgm
+import xgboost as xgb
+from sklearn.metrics import log_loss
+from sklearn.ensemble import RandomForestClassifier
+from sklearn import preprocessing
+from sklearn.model_selection import KFold
+from sklearn.model_selection import StratifiedKFold
+from sklearn.model_selection import cross_val_score
+from sklearn.model_selection import train_test_split,KFold,cross_validate
+import optuna
+
+train_pitch_pre = pd.read_csv("train_pitch.csv")
+train_player_pre = pd.read_csv("train_player.csv")     
+test_pitch_pre = pd.read_csv("test_pitch.csv")
+test_player_pre = pd.read_csv("test_player.csv")
+
+                           
+del train_pitch_pre["投球位置区域"]
+
+# print(train_pitch_pre.shape)#(257117, 50)
+# print(test_pitch_pre.shape)#(521650, 49)
+
+# te = test_pitch_pre["投手ID"].unique()
+tr = train_pitch_pre["投手ID"].unique()
+len(tr)
+# te=set(te)
+# tr=set(tr)
+
+# sa = (te | tr) - te
+# len(sa)
+kyuushu_tr = train_pitch_pre.pivot_table(index="投手ID",columns="球種",values="イニング",aggfunc='count')
+kyuushu_tr_tmp = pd.DataFrame(kyuushu_tr.values)
+kyuushu_tr_index = pd.DataFrame(kyuushu_tr.index)
+kyuushu_tr = pd.concat([kyuushu_tr_tmp,kyuushu_tr_index],axis=1)
+kyuushu_tr = kyuushu_tr.fillna(0)
+# kyuushu_tr_bool = kyuushu_tr[[0,1,2,3,4,5,6,7]].applymap(lambda x : 1 if x > 0 else 0)
+# kyuushu_tr = pd.concat([kyuushu_tr,kyuushu_tr_bool],axis=1)
+
+kyuushu_tr["pr0"] = kyuushu_tr[0]/(kyuushu_tr[0]+kyuushu_tr[1]+kyuushu_tr[2]+kyuushu_tr[3]+kyuushu_tr[4]+kyuushu_tr[5]+kyuushu_tr[6]+kyuushu_tr[7])
+kyuushu_tr["pr1"] = kyuushu_tr[1]/(kyuushu_tr[0]+kyuushu_tr[1]+kyuushu_tr[2]+kyuushu_tr[3]+kyuushu_tr[4]+kyuushu_tr[5]+kyuushu_tr[6]+kyuushu_tr[7])
+kyuushu_tr["pr2"] = kyuushu_tr[2]/(kyuushu_tr[0]+kyuushu_tr[1]+kyuushu_tr[2]+kyuushu_tr[3]+kyuushu_tr[4]+kyuushu_tr[5]+kyuushu_tr[6]+kyuushu_tr[7])
+kyuushu_tr["pr3"] = kyuushu_tr[3]/(kyuushu_tr[0]+kyuushu_tr[1]+kyuushu_tr[2]+kyuushu_tr[3]+kyuushu_tr[4]+kyuushu_tr[5]+kyuushu_tr[6]+kyuushu_tr[7])
+kyuushu_tr["pr4"] = kyuushu_tr[4]/(kyuushu_tr[0]+kyuushu_tr[1]+kyuushu_tr[2]+kyuushu_tr[3]+kyuushu_tr[4]+kyuushu_tr[5]+kyuushu_tr[6]+kyuushu_tr[7])
+kyuushu_tr["pr5"] = kyuushu_tr[5]/(kyuushu_tr[0]+kyuushu_tr[1]+kyuushu_tr[2]+kyuushu_tr[3]+kyuushu_tr[4]+kyuushu_tr[5]+kyuushu_tr[6]+kyuushu_tr[7])
+kyuushu_tr["pr6"] = kyuushu_tr[6]/(kyuushu_tr[0]+kyuushu_tr[1]+kyuushu_tr[2]+kyuushu_tr[3]+kyuushu_tr[4]+kyuushu_tr[5]+kyuushu_tr[6]+kyuushu_tr[7])
+kyuushu_tr["pr7"] = kyuushu_tr[7]/(kyuushu_tr[0]+kyuushu_tr[1]+kyuushu_tr[2]+kyuushu_tr[3]+kyuushu_tr[4]+kyuushu_tr[5]+kyuushu_tr[6]+kyuushu_tr[7])
+del kyuushu_tr[0],kyuushu_tr[1],kyuushu_tr[2],kyuushu_tr[3],kyuushu_tr[4],kyuushu_tr[5],kyuushu_tr[6],kyuushu_tr[7]
+
+
+train_pitch_pre = pd.merge(train_pitch_pre,kyuushu_tr,on="投手ID",how="left")
+train_pitch_pre.head()
+
+test_pitch_pre = pd.merge(test_pitch_pre,kyuushu_tr,on="投手ID",how="left")
+test_pitch_pre.head()
+train_pitch_y = train_pitch_pre["球種"]
+del train_pitch_pre["球種"]
+print(train_player_pre.columns)
+print(train_pitch_pre.columns)
+
+#それぞれのファイルでキーの連番あるのでくっつけたら重複する
+# test_pitch shape: (142324, 49)
+# train_pitch shape: (176719, 51)
+
+def del_col(data,ls):
+    for column in ls:
+        del data[str(column)]
+
+del_player = ["チーム名","選手名","背番号",'生年月日', '出身高校ID', '出身高校名', '出身大学ID',
+              '出身大学名',"社会人","育成選手F","年俸","身長","体重",
+              "ドラフト年","ドラフト種別","ドラフト順位","出身地","血液型","出身国"]
+del_col(train_player_pre,del_player)
+del_col(test_player_pre,del_player)
+
+del_pitch = ['年度','日付', '時刻','ホームチームID','アウェイチームID','打者チームID','球場ID',
+             '球場名','試合種別詳細','一塁走者ID', '二塁走者ID', '三塁走者ID', '一塁手ID',
+             '二塁手ID', '三塁手ID', '遊撃手ID', '左翼手ID', '中堅手ID', '右翼手ID', 
+             '投手登板順', '投手試合内対戦打者数','投手試合内投球数', "打者打順","投手イニング内投球数",
+             "イニング","イニング内打席数",'表裏', "試合内投球数","打者試合内打席数","打者守備位置",
+             "捕手ID","成績対象投手ID","成績対象打者ID"]
+del_col(train_pitch_pre,del_pitch)
+del_col(test_pitch_pre,del_pitch)
+print(train_pitch_pre.shape)
+print(test_pitch_pre.shape)
+
+
+#一旦alldata作ってラベルエンコーディング
+alldata_pitch = pd.concat([train_pitch_pre,test_pitch_pre],axis=0,ignore_index=True)
+alldata_player = pd.concat([train_player_pre,test_player_pre],axis=0,ignore_index=True)
+
+print(alldata_pitch.shape)
+print(alldata_player.shape)
+
+
+#これで全て欠損値ないことを確認
+# alldata_player.isnull().sum()
+# alldata_pitch.isnull().sum()
+#alldataでの処理
+alldata_pitch["プレイ前走者状況"]=alldata_pitch["プレイ前走者状況"].fillna("___")
+# alldata_player["BMI"]=alldata_player["体重"]/alldata_player["身長"]**2/10000
+alldata_pitch["tensa"]=alldata_pitch["プレイ前ホームチーム得点数"]-alldata_pitch["プレイ前アウェイチーム得点数"]
+
+
+def label_encording(data,ls):
+    for column in ls:
+        le = preprocessing.LabelEncoder()
+        le.fit(data[column])
+        data[column] = le.transform(data[column])
+
+label_player = ["位置","投","打"]
+label_encording(alldata_player,label_player)
+
+label_pitch = ["投手役割","打者打席左右","投手投球左右","プレイ前走者状況"]
+label_encording(alldata_pitch,label_pitch)
+
+# 全てintになってることを確認
+# print(alldata_player.dtypes)
+# print(alldata_pitch.dtypes)
+
+train_pitch = alldata_pitch[:train_pitch_pre.shape[0]]
+test_pitch  = alldata_pitch[train_pitch_pre.shape[0]:]
+
+train_player = alldata_player[:train_player_pre.shape[0]]
+test_player  = alldata_player[train_player_pre.shape[0]:]
+print("train:",train_pitch.shape)
+print("test:",test_pitch.shape)
+
+#結合
+train_join = pd.merge(train_pitch,train_player.drop_duplicates(subset="選手ID"),left_on=["投手ID"],right_on=["選手ID"],how="inner")
+del train_join["チームID"]
+del train_join["選手ID"]
+print("train_join",train_join.shape)
+# train_join.dtypes
+
+test_join = pd.merge(test_pitch,test_player.drop_duplicates(subset="選手ID"),left_on=["投手ID"],right_on=["選手ID"],how="inner")
+del test_join["チームID"]
+del test_join["選手ID"]
+print("test_join",test_join.shape)
+
+
+train_join = train_join.fillna(99)
+test_join  = test_join.fillna(99)
+test_join.tail()
+#最終前処理
+
+del train_join["データ内連番"]
+del train_join["試合ID"]
+del train_join["試合内連番"]
+# del train_join["投手ID"]
+del train_join["投手チームID"]
+del train_join["打者ID"]
+del train_join["年度"]
+del train_join["プレイ前ホームチーム得点数"]
+del train_join["プレイ前アウェイチーム得点数"]
+del train_join["位置"]
+del train_join["投"]
+del train_join["打"]
+
+del test_join["データ内連番"]
+del test_join["試合ID"]
+del test_join["試合内連番"]
+# del test_join["投手ID"]
+del test_join["投手チームID"]
+del test_join["打者ID"]
+del test_join["年度"]
+del test_join["プレイ前ホームチーム得点数"]
+del test_join["プレイ前アウェイチーム得点数"]
+del test_join["位置"]
+del test_join["投"]
+del test_join["打"]
+
+
+train_pitch_y.columns="y"
+train_join.columns=range(0,18)
+test_join.columns=range(0,18)
+
+
+def objectives(trial):
+    # scikit-learnでお試しデータの準備
+    X_train, X_test, y_train, y_test = train_test_split(train_join, train_pitch_y, random_state=0)
+
+    # optunaでのハイパーパラメータサーチ範囲の設定
+    params = {
+        #fixed
+#         'boosting_type':'gbdt',
+#         'max_depth':-1,
+#         'learning_rate':0.1,
+        "objective":"multiclass",
+        'n_estimators': 500,
+#         'metric':'multi_logloss',
+
+        #variable
+        'max_depth': trial.suggest_int('max_depth', 3, 8),
+        "learning_rate": trial.suggest_loguniform('learning_rate',0.005, 0.4),
+        'num_leaves': trial.suggest_int('num_leaves', 5, 200),
+        'reg_alpha': trial.suggest_loguniform('reg_alpha',0.001, 10),
+        'reg_lambda':trial.suggest_loguniform('reg_lambda', 0.001, 10),
+
+    }
+
+    # LightGBMで学習+予測
+    model_lgm = lgm.LGBMClassifier(**params,random_state=0)# 追加部分
+#     model_xgb = xgb.XGBRegressor(**params,random_state=0)
+    
+    # kFold交差検定で決定係数を算出し、各セットの平均値を返す
+    kf = KFold(n_splits=4, shuffle=True, random_state=0)
+    scores_lgm = cross_validate(model_lgm, X=X_train, y=y_train,scoring="neg_log_loss",cv=kf)
+#     scores_xgb = cross_validate(model_xgb, X=X_train, y=y_train,scoring="neg_mean_squared_error",cv=kf)   
+
+    return scores_lgm['test_score'].mean()
+
+# optunaによる最適化呼び出し
+opt = optuna.create_study(direction='minimize')
+opt.optimize(objectives, n_trials=10)
+
+
+# 実行結果表示
+print('最終トライアル回数:{}'.format(len(opt.trials)))
+print('ベストトライアル:')
+trial = opt.best_trial
+print('値:{}'.format(trial.value))
+print('パラメータ:')
+for key, value in trial.params.items():
+    print('{}:{}'.format(key, value))
+
+from sklearn.metrics import log_loss
+# params_lgm={"max_depth":7,'objective': 'multiclass',"learning_rate":0.15,"n_estimators":50,
+#         'num_class': 8,"seed":1}
+
+# params_lgm2={"max_depth":7,'objective': 'multiclass',"learning_rate":0.15,"n_estimators":50,
+#         'num_class': 8,"seed":1}
+
+# params_rf={"max_depth":8,"n_estimators":50,"random_state":1}
+
+# model_nei = KNeighborsClassifier()
+model_lgm = lgm.LGBMClassifier(objective="multiclass",num_class=8,learning_rate=0.1,n_estimators=50,max_depth=5,seed=0)
+model_lgm2 = lgm.LGBMClassifier(objective="multiclass",num_class=8,learning_rate=0.01,n_estimators=50,max_depth=5,seed=1)
+# model_rf = RandomForestClassifier(max_depth=6,n_estimators=30,random_state=0)
+
+# model_nei.fit(train_join,train_pitch_y)
+model_lgm.fit(train_join,train_pitch_y)
+model_lgm2.fit(train_join,train_pitch_y)
+# model_rf.fit(train_join,train_pitch_y)
+
+# score = cv_rmse(model_nei,train_join,train_pitch_y)
+# print("Neiborhood: {:.4f} ({:.4f})\n".format(score.mean(), score.std()), datetime.now(), )
+score = cv_rmse(model_lgm,train_join,train_pitch_y)
+print("lightgbm: {:.4f} ({:.4f})\n".format(score.mean(), score.std()), datetime.now(), )
+score = cv_rmse(model_lgm2,train_join,train_pitch_y)
+print("lightgbm2: {:.4f} ({:.4f})\n".format(score.mean(), score.std()), datetime.now(), )
+# score = cv_rmse(model_rf,train_join,train_pitch_y)
+# print("RF: {:.4f} ({:.4f})\n".format(score.mean(), score.std()), datetime.now(), )
+
+
+
+
+#lgm score 2.4846 lr=0.37,md=5 es=200
+
+# # y_pred_prob_nei = model_nei.predict_proba(test_join)
+y_pred_prob_lgm = model_lgm.predict_proba(test_join)
+y_pred_prob_lgm2 = model_lgm2.predict_proba(test_join)
+# y_pred_prob_rf = model_rf.predict_proba(test_join)
+
+y_pred_prob = y_pred_prob_lgm*0.5+y_pred_prob_lgm2*0.5
+
+#submission 521650 rows × 9 columns
+y_pred_prob = pd.DataFrame(y_pred_prob)
+# y_pred_prob
+submission = pd.read_csv("submission.csv",header=None)
+submission = pd.DataFrame(submission[0])
+submission = pd.concat([submission,y_pred_prob],axis=1)
+submission
+
+submission.to_csv("submission_5.csv",header=False)
