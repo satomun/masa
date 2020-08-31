@@ -1,0 +1,43 @@
+URL= "http://www.f-takken.com/freins/company/list?tname1=%E7%A6%8F%E5%B2%A1%E5%B8%82%E5%85%A8%E5%9F%9F&locate%5B0%5D=40131&locate%5B1%5D=40132&locate%5B2%5D=40133&locate%5B3%5D=40134&locate%5B4%5D=40135&locate%5B5%5D=40136&locate%5B6%5D=40137&name=&tel=&page="
+Selector = "body"
+
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.common.by import By
+from bs4 import BeautifulSoup
+
+from time import sleep
+
+
+op = Options()
+op.add_argument("--disable-gpu");
+op.add_argument("--disable-extensions");
+op.add_argument("--proxy-server='direct://'");
+op.add_argument("--proxy-bypass-list=*");
+op.add_argument("--start-maximized");
+op.add_argument("--headless");
+driver = webdriver.Chrome(executable_path=r"C:\usr\local\bin\chromedriver.exe")#chrome_options=op
+
+for p_num in range(1,3):
+
+    driver.get ( URL + str(p_num) )
+    
+    WebDriverWait(driver, 5000).until(
+        EC.presence_of_element_located((By.CSS_SELECTOR, Selector))
+    )
+
+    soup = BeautifulSoup(driver.page_source, features="html.parser")
+
+    el = soup.find_all("li",class_="item")
+
+    for sp in el:
+        print(sp.find('h5').text.replace('\n', ''))
+        
+        li_item = sp.find_all('li')
+        
+        for li in li_item:
+            print (li.text.replace('　', '').replace(' ', ''))
+        
+    sleep(10)
